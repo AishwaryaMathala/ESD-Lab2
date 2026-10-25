@@ -20,7 +20,7 @@ By the end you will have:
 - `POST /api/courses` - admin-only: requires `ADMIN` role
 
 **The point of the lab is the process, not just working code.**  
-You must use a structured prompt template, review every AI output, and make one change without AI.
+You must use a structured prompt template, review every AI output
 
 ---
 
