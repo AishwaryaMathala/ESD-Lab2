@@ -280,10 +280,9 @@ Compare against API contract row A1 line by line.
 
 ---
 
-## No-AI Change
+## No-AI Change Tasks
 
-**Which task did you get?**  
-> *e.g. "Task 2 — Add GET /api/courses/{id} as a public endpoint"*
+
 
 **Files changed:**
 
