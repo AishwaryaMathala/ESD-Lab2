@@ -1,7 +1,7 @@
 # REVIEW.md — AI Output Review Log
 
 Complete **one review entry per slice** before moving to the next.  
-TAs will spot-check these during and after the lab.
+
 
 ---
 
