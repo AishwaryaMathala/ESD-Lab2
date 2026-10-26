@@ -24,6 +24,7 @@ public class CourseService {
                 .map(this::toResponse)
                 .toList();
     }
+    
 
     public CourseResponse create(CourseRequest request) {
         if (courseRepository.existsByCode(request.code())) {

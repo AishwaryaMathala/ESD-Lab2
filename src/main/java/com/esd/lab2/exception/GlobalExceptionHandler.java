@@ -58,11 +58,17 @@ public class GlobalExceptionHandler {
         return buildError(HttpStatus.NOT_FOUND, ex.getMessage(), request);
     }
 
+    
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiError> handleGeneric(HttpServletRequest request) {
+    public ResponseEntity<ApiError> handleGeneric(
+            Exception ex, HttpServletRequest request) {
+
+        //ex.printStackTrace();
+
         return buildError(HttpStatus.INTERNAL_SERVER_ERROR,
                 "An unexpected error occurred.", request);
     }
+
 
     // ── helpers ───────────────────────────────────────────────────────────────
 

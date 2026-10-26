@@ -139,7 +139,7 @@ Compare against API contract row A1 line by line.
 
 | Check | Pass / Fail |
 |---|---|
-| `GET /api/courses` works **without** token | |
+| `GET /api/courses` works **without** token (S3 baseline, before Task 5 change) | |
 | `GET /api/users/me` returns **401** with no token | |
 | `GET /api/users/me` returns **200** with valid token | |
 | 401 body is an `ApiError` JSON object | |
@@ -157,8 +157,8 @@ Compare against API contract row A1 line by line.
 |---|---|
 | Spring Security 6 style: lambda DSL, `requestMatchers`, `authorizeHttpRequests` | |
 | Rejected: `WebSecurityConfigurerAdapter`, `antMatchers`, `authorizeRequests`, `.and()` | |
-| `permitAll` covers only the three specific public endpoints | |
-| `GET /api/courses` is public but `POST /api/courses` is NOT (watch for broad matcher) | |
+| `permitAll` covers only the specific public endpoints required at this slice; final Task 5 later protects `GET /api/courses` | |
+| At S3 baseline, `GET /api/courses` is public and `POST /api/courses` is NOT; final Task 5 later protects `GET /api/courses` | |
 | Signature + expiry verified with `Jwts.parser().verifyWith(key).build().parseSignedClaims(token)` | |
 | Authorities use `ROLE_` prefix | |
 | Entry point and access-denied handler wired via `exceptionHandling(...)` | |
@@ -280,15 +280,42 @@ Compare against API contract row A1 line by line.
 
 ---
 
+
 ## No-AI Change Tasks
 
-
-
-**Files changed:**
+**### Files changed**
 
 | File | What changed and why |
 |---|---|
-| | |
+| `security/JwtService.java` | Changed the JWT expiration to 15 minutes and ensured `expiresIn` reflects the new duration. |
+| `controller/CourseController.java` | Added the public `GET /api/courses/{id}` endpoint to retrieve a course by ID. |
+| `controller/UserController.java` | Added `PUT /api/users/me` to update only the authenticated user's `fullName`. |
+| Signup validation files | Added password validation requiring at least one digit, returning HTTP 400 with a field error for invalid passwords. |
+| `config/SecurityConfig.java` | Changed `GET /api/courses` from public to protected access and checked which existing tests now fail. |
 
-**Explanation (your own words):**
-> *Describe what you changed and why it works.*
+**### Explanation (your own words)**
+
+1. **JWT expiry — 15 minutes**
+   The JWT lifetime is configured as `900` seconds in `application.yml`. `JwtService` uses the configured duration to calculate the token expiry, and the login response gets `expiresIn` from the JWT service instead of hardcoding the response value. I logged in with the test student account and confirmed that the response reported `expiresIn = 900`.
+
+2. **Get a course by ID**
+   Added `GET /api/courses/{id}` to `CourseController`. The controller calls the existing `CourseService.findById(id)` method. The service looks up the course and throws `ResourceNotFoundException` if the ID does not exist. I confirmed that an existing course (ID `2`) returned its details. I also ran the nonexistent-ID check and recorded it as completed; the expected status is `404`.
+
+3. **Update the authenticated user's profile**
+   Added `PUT /api/users/me` and an `UpdateProfileRequest` DTO. The endpoint identifies the current user from the authenticated principal and updates only `fullName`; email and role are not accepted as update fields. I tested the update and then fetched `/api/users/me` to verify the result; both checks passed.
+
+4. **Require a digit in signup passwords**
+   Added a password `@Pattern` validation rule requiring at least one digit, while retaining the existing required-field and length checks. A password without a digit should receive `400 Bad Request` with a password field validation error. The signup validation check was completed.
+
+5. **Require authentication to list courses**
+   Changed the `GET /api/courses` security rule from `permitAll()` to `authenticated()`. An anonymous request should now return `401 Unauthorized`; a request with a valid bearer token should return `200 OK`. This intentionally changes the earlier S3 contract that allowed anonymous access to the course list. Any test that expects `GET /api/courses` to work without a token must be updated to expect `401`, and an authenticated-access test should verify `200`.
+
+### Final build and test record
+
+- Command run: `mvn clean test`
+- Result: `BUILD SUCCESS`
+- Java source compilation: passed (30 source files compiled).
+- Automated tests: Maven reported `No sources to compile` for tests and `No tests to run`; therefore, this build confirms compilation, not automated test execution.
+- Manual checks reported during the work: login returned `expiresIn = 900`; existing course lookup returned course ID `2`; profile update and follow-up GET passed.
+- Before submission, verify and record the two final Task 5 requests separately: `GET /api/courses` without a token should return `401`, and with a valid token should return `200`. Do not mark these manual checks as passed until you have run them.
+

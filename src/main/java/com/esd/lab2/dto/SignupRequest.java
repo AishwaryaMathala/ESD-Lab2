@@ -1,26 +1,23 @@
+
 package com.esd.lab2.dto;
 
 import jakarta.validation.constraints.*;
 
-/**
- * S1 — FILL IN MANUALLY (no AI for this slice).
- *
- * This is the request body for POST /api/auth/signup.
- * Add the correct jakarta.validation annotation on each field.
- *
- * Rules:
- *   - email  : must be a valid email format, required (not blank)
- *   - password: required, between 8 and 64 characters
- *   - fullName: required (not blank), max 100 characters
- */
 public record SignupRequest(
 
-        // TODO: add @Email and @NotBlank annotation
+        @NotBlank(message = "Email is required")
+        @Email(message = "Email must be valid")
         String email,
 
-        // TODO: add @NotBlank and @Size(min = 8, max = 64) annotations
+        @NotBlank(message = "Password is required")
+        @Size(min = 8, max = 64,
+              message = "Password must be between 8 and 64 characters")
+        @Pattern(regexp = ".*\\d.*",
+                 message = "Password must contain at least one digit")
         String password,
 
-        // TODO: add @NotBlank and @Size(max = 100) annotations
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100,
+              message = "Full name must be at most 100 characters")
         String fullName
 ) {}
