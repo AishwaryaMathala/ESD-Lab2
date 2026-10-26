@@ -28,8 +28,6 @@ Package layout:
   │                 ResourceNotFoundException.java
   └── security/     JsonAuthenticationEntryPoint.java, JsonAccessDeniedHandler.java
 
-Existing code you must use (do not rewrite it):
-<paste User.java, Role.java, UserRepository.java here>
 
 TASK
 Implement only POST /api/auth/signup.
