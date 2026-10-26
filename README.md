@@ -177,9 +177,17 @@ The app should start on `http://localhost:8080`.
 You should see `[AdminSeeder] Admin user created: admin@esd.local` in the console.
 
 **Verify it works:**
+
+*bash / macOS / Linux:*
 ```bash
 curl http://localhost:8080/api/courses
 # -> 200 []
+```
+
+*PowerShell (Windows):*
+```powershell
+Invoke-RestMethod -Uri "http://localhost:8080/api/courses"
+# -> @() (empty list)
 ```
 
 ---
@@ -224,21 +232,33 @@ Work through slices in order. **Do not start the next slice until the current on
 
 | Slice | Delivers | APIs |
 |---|---|---|
-| **S1** Signup (Manual) | Registration with BCrypt | A1 |
-| **S2** Login (AI) | Password check + JWT issuing | A2 |
-| **S3** Protect (AI) | JWT filter, security rules, current user | P2 (P1 stays public) |
-| **S4** Role (AI) | ADMIN-only course creation | P3  |
-| **S5** Logout (AI) *(stretch)* | Token denylist | A3 |
+| **S1** Signup | Registration with BCrypt | A1 |
+| **S2** Login | Password check + JWT issuing | A2 |
+| **S3** Protect | JWT filter, security rules, current user | P2 (P1 stays public) |
+| **S4** Role | ADMIN-only course creation | P3  |
+| **S5** Logout *(stretch)* | Token denylist | A3 |
 
 ---
 
-### S1 - Signup (Manual - no AI)
+### S1 - User Registration (Signup)
 
-**Skeleton files are already in the repo. You fill in the `// TODO` blocks:**
-- [`dto/SignupRequest.java`](src/main/java/com/esd/lab2/dto/SignupRequest.java) - add validation annotations
-- [`dto/UserResponse.java`](src/main/java/com/esd/lab2/dto/UserResponse.java) - fields already provided
-- [`service/AuthService.java`](src/main/java/com/esd/lab2/service/AuthService.java) - implement the 5 steps in `signup()`
-- [`controller/AuthController.java`](src/main/java/com/esd/lab2/controller/AuthController.java) - call the service, return 201
+#### Tasks to Perform:
+
+1. **Step 1: Add Input Validation Annotations**
+   - **File:** [`src/main/java/com/esd/lab2/dto/SignupRequest.java`](src/main/java/com/esd/lab2/dto/SignupRequest.java)
+   - **Task:** Add Jakarta validation annotations: `@NotBlank` and `@Email` for `email`, `@NotBlank` and `@Size(min = 8, max = 64)` for `password`, and `@NotBlank` with `@Size(max = 100)` for `fullName`.
+
+2. **Step 2: Define Response Data**
+   - **File:** [`src/main/java/com/esd/lab2/dto/UserResponse.java`](src/main/java/com/esd/lab2/dto/UserResponse.java)
+   - **Task:** Verify response record contains public user fields (`id`, `email`, `fullName`, `role`, `createdAt`). Never include `passwordHash`.
+
+3. **Step 3: Implement Registration Business Logic**
+   - **File:** [`src/main/java/com/esd/lab2/service/AuthService.java`](src/main/java/com/esd/lab2/service/AuthService.java)
+   - **Task:** Implement `signup()`: trim and lowercase the email, throw `DuplicateResourceException` (409) if the email already exists, hash the password using injected `passwordEncoder.encode()`, save user with `Role.STUDENT`, and return `UserResponse`.
+
+4. **Step 4: Expose the Signup Endpoint**
+   - **File:** [`src/main/java/com/esd/lab2/controller/AuthController.java`](src/main/java/com/esd/lab2/controller/AuthController.java)
+   - **Task:** Add `POST /api/auth/signup` accepting `@Valid @RequestBody SignupRequest`, calling `authService.signup()`, and returning HTTP `201 Created`.
 
 **Things to verify before moving to S2:**
 - Password hashed via the **injected** `PasswordEncoder` bean - not `new BCryptPasswordEncoder()`.
@@ -250,6 +270,8 @@ Work through slices in order. **Do not start the next slice until the current on
 **Fill in S1 section of `REVIEW.md` before moving on.**
 
 **Test manually:**
+
+*bash / macOS / Linux (curl):*
 ```bash
 curl -X POST http://localhost:8080/api/auth/signup \
   -H "Content-Type: application/json" \
@@ -262,16 +284,39 @@ curl -X POST http://localhost:8080/api/auth/signup \
   -H "Content-Type: application/json"
 ```
 
+*PowerShell (Windows):*
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/auth/signup" -ContentType "application/json" -Body '{"email":"alice@test.com","password":"password1","fullName":"Alice"}'
+# -> 201 { id: ..., email: "alice@test.com", role: "STUDENT", ... }
+
+# Duplicate -> 409
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/auth/signup" -ContentType "application/json" -Body '{"email":"alice@test.com","password":"password1","fullName":"Alice"}'
+```
+
+
 ---
 
-### S2 - Login & JWT (AI)
+### S2 - User Authentication & JWT Issuing (Login)
 
-**What you ask AI to create:**
-- `dto/LoginRequest.java`
-- `dto/LoginResponse.java`
-- `security/JwtService.java`  `generateToken` method only
-- `service/AuthService.java`  add `login` method
-- `controller/AuthController.java`  add `login` endpoint
+#### Tasks to Perform:
+
+1. **Step 1: Create Login Request and Response DTOs**
+   - **File:** [`src/main/java/com/esd/lab2/dto/LoginRequest.java`](src/main/java/com/esd/lab2/dto/LoginRequest.java)
+     - **Task:** Create record with `@NotBlank` and `@Email` on `email`, and `@NotBlank` on `password`.
+   - **File:** [`src/main/java/com/esd/lab2/dto/LoginResponse.java`](src/main/java/com/esd/lab2/dto/LoginResponse.java)
+     - **Task:** Create record with fields `accessToken` (String), `tokenType` (String default `"Bearer"`), and `expiresIn` (long seconds).
+
+2. **Step 2: Implement JWT Generation**
+   - **File:** [`src/main/java/com/esd/lab2/security/JwtService.java`](src/main/java/com/esd/lab2/security/JwtService.java)
+   - **Task:** Implement `generateToken(User user)` using JJWT 0.12 API. Read `jwt.secret` from `@Value`, configure claims (`sub` = email, `role`, `jti` = random UUID, `iat`, `exp`), and sign with HMAC-SHA256.
+
+3. **Step 3: Implement Login Verification Logic**
+   - **File:** [`src/main/java/com/esd/lab2/service/AuthService.java`](src/main/java/com/esd/lab2/service/AuthService.java)
+   - **Task:** Implement `login(LoginRequest)`: look up user by lowercase/trimmed email, verify password with `passwordEncoder.matches()`, throw `InvalidCredentialsException` with identical message `"Invalid email or password"` on any failure, generate token, and return `LoginResponse`.
+
+4. **Step 4: Expose the Login Endpoint**
+   - **File:** [`src/main/java/com/esd/lab2/controller/AuthController.java`](src/main/java/com/esd/lab2/controller/AuthController.java)
+   - **Task:** Add `POST /api/auth/login` accepting `@Valid @RequestBody LoginRequest`, calling `authService.login()`, and returning HTTP `200 OK`.
 
 **Key things to check in your review:**
 - Same 401 message for unknown email AND wrong password: `"Invalid email or password"`.
@@ -282,6 +327,8 @@ curl -X POST http://localhost:8080/api/auth/signup \
 - The token parse/validate method is **not** written yet (that's S3).
 
 **Test manually:**
+
+*bash / macOS / Linux (curl):*
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
@@ -289,17 +336,36 @@ curl -X POST http://localhost:8080/api/auth/login \
 #  200 { "accessToken": "eyJ...", "tokenType": "Bearer", "expiresIn": 3600 }
 ```
 
+*PowerShell (Windows):*
+```powershell
+$login = Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/auth/login" -ContentType "application/json" -Body '{"email":"alice@test.com","password":"password1"}'
+$login
+# -> { accessToken: "eyJ...", tokenType: "Bearer", expiresIn: 3600 }
+```
+
 ---
 
-### S3 - JWT Filter & Protected API (AI)
+### S3 - JWT Filter & Protected API
 
-> This is the hardest slice. Read the review checklist carefully before accepting any file.
+> This is the hardest slice. Read the review checklist carefully before moving on.
 
-**What you ask AI to create/modify:**
-- `security/JwtService.java`  add parse/validate method
-- `security/JwtAuthenticationFilter.java`  new class, `extends OncePerRequestFilter`
-- `config/SecurityConfig.java`  replace the `filterChain` bean only (keep `PasswordEncoder`)
-- `controller/UserController.java`  new, with `GET /api/users/me`
+#### Tasks to Perform:
+
+1. **Step 1: Implement Token Parsing and Verification**
+   - **File:** [`src/main/java/com/esd/lab2/security/JwtService.java`](src/main/java/com/esd/lab2/security/JwtService.java)
+   - **Task:** Implement `parseToken(String token)` using `Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload()` to cryptographically verify signature, check expiration, and extract `Claims`.
+
+2. **Step 2: Create JWT Authentication Filter**
+   - **File:** [`src/main/java/com/esd/lab2/security/JwtAuthenticationFilter.java`](src/main/java/com/esd/lab2/security/JwtAuthenticationFilter.java)
+   - **Task:** Create a filter extending `OncePerRequestFilter`. Intercept incoming requests, extract the `Authorization: Bearer <token>` header, parse claims, and populate `SecurityContextHolder` with `UsernamePasswordAuthenticationToken` using authority `"ROLE_" + role`. Clear context on error and continue chain.
+
+3. **Step 3: Configure Spring Security Filter Chain**
+   - **File:** [`src/main/java/com/esd/lab2/config/SecurityConfig.java`](src/main/java/com/esd/lab2/config/SecurityConfig.java)
+   - **Task:** Configure `SecurityFilterChain`: disable CSRF, set session policy to `STATELESS`, permit public endpoints (`POST /api/auth/signup`, `POST /api/auth/login`, `GET /api/courses`), require authentication for `anyRequest()`, wire `jsonAuthenticationEntryPoint` and `jsonAccessDeniedHandler`, and register `jwtAuthenticationFilter` before `UsernamePasswordAuthenticationFilter`.
+
+4. **Step 4: Create Current User Profile Endpoint**
+   - **File:** [`src/main/java/com/esd/lab2/controller/UserController.java`](src/main/java/com/esd/lab2/controller/UserController.java)
+   - **Task:** Add `GET /api/users/me` requiring authentication. Retrieve user details from database by `authentication.getName()`, and return `UserResponse` with HTTP `200 OK`.
 
 **Key things to check in your review:**
 - **Spring Security 6 style only:** `SecurityFilterChain` bean, lambda DSL, `requestMatchers`, `authorizeHttpRequests`. Reject `WebSecurityConfigurerAdapter`, `antMatchers`, `authorizeRequests`, `.and()`.
@@ -312,6 +378,8 @@ curl -X POST http://localhost:8080/api/auth/login \
 - `GET /api/users/me` returns `UserResponse`, not the `User` entity.
 
 **Test manually:**
+
+*bash / macOS / Linux (curl):*
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
@@ -327,22 +395,43 @@ curl http://localhost:8080/api/users/me
 curl http://localhost:8080/api/courses
 ```
 
+*PowerShell (Windows):*
+```powershell
+$token = (Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/auth/login" -ContentType "application/json" -Body '{"email":"alice@test.com","password":"password1"}').accessToken
+
+# Protected -> 200
+Invoke-RestMethod -Uri "http://localhost:8080/api/users/me" -Headers @{ Authorization = "Bearer $token" }
+
+# No token -> 401
+Invoke-RestMethod -Uri "http://localhost:8080/api/users/me"
+
+# Public still works
+Invoke-RestMethod -Uri "http://localhost:8080/api/courses"
+```
+
 ---
 
-### S4 - Role Restriction (AI)
+### S4 - Restricting Course Creation to ADMINs (Role-Based Access Control)
 
-**What you ask AI to change:**
+#### Tasks to Perform:
 
-Choose **one** approach and state it in your review:
-- **Option A:** Add a `requestMatchers` rule in `SecurityConfig` before `anyRequest().authenticated()`.
-- **Option B:** Add `@PreAuthorize("hasRole('ADMIN')")` on `CourseController.create` and `@EnableMethodSecurity` on `SecurityConfig`.
+1. **Step 1: Enforce ADMIN Role in Security Configuration**
+   - **File:** [`src/main/java/com/esd/lab2/config/SecurityConfig.java`](src/main/java/com/esd/lab2/config/SecurityConfig.java)
+   - **Task:** Add `.requestMatchers(HttpMethod.POST, "/api/courses").hasRole("ADMIN")` immediately before `.anyRequest().authenticated()`.
+
+2. **Step 2: Verify Endpoints and Rejection Handling**
+   - **Files:**
+     - [`src/main/java/com/esd/lab2/controller/CourseController.java`](src/main/java/com/esd/lab2/controller/CourseController.java): Endpoint `POST /api/courses` creates courses (HTTP `201 Created`) when caller has `ADMIN` role.
+     - [`src/main/java/com/esd/lab2/security/JsonAccessDeniedHandler.java`](src/main/java/com/esd/lab2/security/JsonAccessDeniedHandler.java): Intercepts `AccessDeniedException` when a non-admin (e.g. `STUDENT`) attempts to post, returning standard HTTP `403 Forbidden` JSON.
+
 
 **Key things to check in your review:**
 - Role naming must be consistent: `hasRole("ADMIN")` looks for authority `ROLE_ADMIN`. If S3 set `ROLE_ADMIN`, this works. If there's a mismatch, every admin call fails with 403.
-- If Option B: `@EnableMethodSecurity` is present on the config class.
 - The diff should be **tiny**. If the AI rewrote the whole config, reject and re-prompt.
 
 **Test manually:**
+
+*bash / macOS / Linux (curl):*
 ```bash
 ADMIN_TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
@@ -362,14 +451,34 @@ curl -X POST http://localhost:8080/api/courses \
   -d '{"code":"CS502","title":"Test","description":""}'
 ```
 
+*PowerShell (Windows):*
+```powershell
+$adminToken = (Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/auth/login" -ContentType "application/json" -Body '{"email":"admin@esd.local","password":"Admin1234!"}').accessToken
+
+# ADMIN -> 201
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/courses" -Headers @{ Authorization = "Bearer $adminToken" } -ContentType "application/json" -Body '{"code":"CS501","title":"Distributed Systems","description":"..."}'
+
+# STUDENT -> 403
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/courses" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body '{"code":"CS502","title":"Test","description":""}'
+```
+
 ---
 
-### S5 - Logout *(stretch, AI)*
+### S5 - Server-Side Token Invalidation (Logout) *(stretch)*
 
-**What you ask AI to create/modify:**
-- `security/TokenDenylist.java`  new `@Component` with `ConcurrentHashMap<String, Instant>`
-- `security/JwtAuthenticationFilter.java`  add denylist check
-- `controller/AuthController.java`  add `logout` endpoint (returns 204)
+#### Tasks to Perform:
+
+1. **Step 1: Create In-Memory Token Denylist**
+   - **File:** [`src/main/java/com/esd/lab2/security/TokenDenylist.java`](src/main/java/com/esd/lab2/security/TokenDenylist.java)
+   - **Task:** Create thread-safe `@Component` using `ConcurrentHashMap<String, Instant>`. Implement `revoke(jti, expiry)` to store revoked token IDs, `isRevoked(jti)` to check revocation, and `cleanExpired()` to clean up naturally expired tokens.
+
+2. **Step 2: Expose the Logout Endpoint**
+   - **File:** [`src/main/java/com/esd/lab2/controller/AuthController.java`](src/main/java/com/esd/lab2/controller/AuthController.java)
+   - **Task:** Add `POST /api/auth/logout`. Extract Bearer token from `Authorization` header, parse claims to retrieve `jti` and expiration date, call `tokenDenylist.revoke(jti, expiry)`, and return HTTP `204 No Content`.
+
+3. **Step 3: Enforce Denylist Check in JWT Filter**
+   - **File:** [`src/main/java/com/esd/lab2/security/JwtAuthenticationFilter.java`](src/main/java/com/esd/lab2/security/JwtAuthenticationFilter.java)
+   - **Task:** Inject `TokenDenylist`. After parsing claims, check `tokenDenylist.isRevoked(jti)`. If revoked, clear `SecurityContextHolder` and stop filter execution so subsequent calls are rejected with HTTP `401 Unauthorized`.
 
 **Key things to check in your review:**
 - Logout **changes server state**  rejects any code that only tells the client to discard the token.
@@ -379,6 +488,8 @@ curl -X POST http://localhost:8080/api/courses \
 - Filter treats a denylisted jti the same as an expired token.
 
 **Test manually:**
+
+*bash / macOS / Linux (curl):*
 ```bash
 # Login  get token  access protected  logout  try protected again
 curl -X POST http://localhost:8080/api/auth/logout -H "Authorization: Bearer $TOKEN"
@@ -387,6 +498,16 @@ curl -X POST http://localhost:8080/api/auth/logout -H "Authorization: Bearer $TO
 curl http://localhost:8080/api/users/me -H "Authorization: Bearer $TOKEN"
 #  401 (same token now rejected)
 ```
+
+*PowerShell (Windows):*
+```powershell
+# Logout -> 204
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/auth/logout" -Headers @{ Authorization = "Bearer $token" }
+
+# Same token now rejected -> 401
+Invoke-RestMethod -Uri "http://localhost:8080/api/users/me" -Headers @{ Authorization = "Bearer $token" }
+```
+
 
 ---
 
